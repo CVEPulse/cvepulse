@@ -1,17 +1,15 @@
-# backend/app.py
-import os
-import json
-import asyncio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
+from apscheduler.schedulers.background import BackgroundScheduler
+import os
+import json
+from datetime import datetime
+from backend.scheduler import fetch_trending_cves  # ✅ fixed import for Render
 
-# Uses your existing scheduler.run_scheduler()
-from scheduler import run_scheduler
+app = FastAPI(title="CVEPulse API", version="2.0")
 
-app = FastAPI(title="CVEPulse")
-
+# Allow frontend access
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -20,40 +18,61 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-DATA_PATH = os.path.join(os.path.dirname(__file__), "data", "trending_cves.json")
+DATA_FILE = os.path.join(os.path.dirname(__file__), "data", "trending_cves.json")
+
+# =========================================================
+# === Background Refresh Job (every 15 minutes) ===========
+# =========================================================
+def scheduled_refresh():
+    """Refresh CVE data every 15 minutes automatically."""
+    try:
+        print(f"[{datetime.utcnow().isoformat()}] 🔄 Refreshing CVE data...")
+        cves = fetch_trending_cves()
+        if cves and len(cves) > 0:
+            with open(DATA_FILE, "w", encoding="utf-8") as f:
+                json.dump(cves, f, indent=2)
+            print(f"[✓] Saved {len(cves)} CVEs → {DATA_FILE}")
+        else:
+            print("[!] No new CVE data received.")
+    except Exception as e:
+        print(f"[⚠] Scheduled refresh failed: {e}")
+
+scheduler = BackgroundScheduler()
+scheduler.add_job(scheduled_refresh, "interval", minutes=15)
+scheduler.start()
+
+# =========================================================
+# === API Endpoints =======================================
+# =========================================================
 
 @app.get("/api/trending")
 def get_trending():
-    if not os.path.exists(DATA_PATH):
-        return {"last_updated": None, "results": []}
-    with open(DATA_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)
+    """Return latest trending CVEs (used by frontend)."""
+    try:
+        if not os.path.exists(DATA_FILE):
+            return JSONResponse(content={"error": "No data found"}, status_code=404)
 
-# Serve the frontend from /static
-FRONTEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend"))
-app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
+        with open(DATA_FILE, "r", encoding="utf-8") as f:
+            cves = json.load(f)
+
+        return {"count": len(cves), "last_updated": datetime.utcnow().isoformat(), "cves": cves}
+    except Exception as e:
+        return JSONResponse(content={"error": f"Failed to load CVE data: {e}"}, status_code=500)
+
 
 @app.get("/")
 def root():
-    # Go to frontend
-    return RedirectResponse(url="/static/index.html")
+    """Root health check for Render."""
+    return {
+        "service": "CVEPulse API",
+        "status": "online",
+        "timestamp": datetime.utcnow().isoformat() + "Z"
+    }
 
-# ---------- 15-minute background refresher ----------
-async def _refresh_job():
-    while True:
-        try:
-            print("[CVEPulse] periodic refresh…")
-            run_scheduler()  # rebuild data/data/trending_cves.json
-        except Exception as e:
-            print("[CVEPulse] refresh error:", e)
-        await asyncio.sleep(15 * 60)  # 15 minutes
+# =========================================================
+# === Shutdown Handling ===================================
+# =========================================================
 
-@app.on_event("startup")
-async def _startup():
-    # Prime the data once on boot so the page isn't empty
-    try:
-        run_scheduler()
-    except Exception as e:
-        print("[CVEPulse] initial refresh error:", e)
-    # Start periodic refresh
-    asyncio.create_task(_refresh_job())
+@app.on_event("shutdown")
+def shutdown_event():
+    scheduler.shutdown(wait=False)
