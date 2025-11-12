@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+
+<!-- SEO -->
+<title>Top Trending CVEs Today | CVEPulse — Most Talked-About Vulnerabilities (Updated Daily)</title>
+<meta name="description" content="Top trending CVEs today — a live, ranked list of the most talked-about vulnerabilities across security sources. Sort by recency or CVSS, see severity, sources and publish dates." />
+<meta name="keywords" content="trending CVEs, top CVEs today, CVE trends, most talked vulnerabilities, critical CVEs, high CVSS, security news" />
+<link rel="canonical" href="/" />
+<meta name="robots" content="index,follow,max-image-preview:large" />
+
+<!-- Open Graph / Twitter -->
+<meta property="og:type" content="website" />
+<meta property="og:title" content="Top Trending CVEs Today | CVEPulse" />
+<meta property="og:description" content="Live list of the most discussed CVEs across multiple security sources. Updated continuously." />
+<meta property="og:url" content="/" />
+<meta property="og:image" content="/static/og-trending-cves.png" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Top Trending CVEs Today | CVEPulse" />
+<meta name="twitter:description" content="Live list of the most discussed CVEs across multiple security sources. Updated continuously." />
+<meta name="twitter:image" content="/static/og-trending-cves.png" />
+
+<link rel="icon" href="favicon.ico" />
+
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #121820;
+    --muted: #9ba6b1;
+    --text: #e6edf3;
+    --teal: #00bcd4;
+    --line: #1f2937;
+    --pill: #161b22;
+
+    --crit: #ff4d4f;
+    --high: #f59e0b;
+    --med:  #e8c341;
+    --low:  #9ba6b1;
+  }
+  body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 "Inter","Segoe UI",sans-serif}
+  .wrap{max-width:1280px;margin:24px auto;padding:0 20px}
+  header{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:800;color:var(--teal);font-size:22px}
+  .logo{width:28px;height:28px;display:inline-block}
+  .muted{color:var(--muted)}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+  h1{margin:0 0 12px 0;font-size:24px}
+  h2{margin:0 0 10px 0}
+  .badges{display:flex;flex-wrap:wrap;gap:10px}
+  .badge{background:var(--pill);border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-weight:700}
+  .badge-critical{color:var(--crit);border-color:#3a1a1b;background:#1a1213}
+  .badge-high{color:var(--high);border-color:#3a2a0d;background:#171309}
+  .badge-medium{color:var(--med);border-color:#3a3210;background:#17150a}
+  .badge-low{color:var(--low);}
+
+  .grid{display:grid;grid-template-columns:1fr 360px;gap:16px}
+  .table{width:100%;border-collapse:collapse;background:#0f1520}
+  .table th,.table td{border-bottom:1px solid var(--line);padding:12px 14px;text-align:left;vertical-align:top}
+  .table th{color:var(--teal);background:#111824;font-weight:700}
+  .cve{font-weight:800}
+  .cvss{font-weight:800;margin-left:6px;color:#ffd86b}
+  .src{display:inline-block;margin-right:6px;color:#cbd5e1}
+  .sev{font-weight:800}
+  .sev-critical{color:var(--crit)}
+  .sev-high{color:var(--high)}
+  .sev-medium{color:var(--med)}
+  .sev-low{color:var(--low)}
+  footer{margin:20px 0;color:var(--muted);text-align:center}
+
+  /* toolbar */
+  .toolbar{display:flex;gap:12px;align-items:center;margin:6px 0 14px 0}
+  .spacer{flex:1}
+  select{background:#0f1520;border:1px solid var(--line);color:var(--text);border-radius:8px;padding:6px 10px}
+  label{color:var(--muted);font-weight:600}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        <!-- Teal pulse logo -->
+        <span class="logo" aria-hidden="true">
+          <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <!-- shield -->
+            <path d="M32 6l18 6v14c0 12.2-8.2 22.7-18 26-9.8-3.3-18-13.8-18-26V12l18-6z"
+                  stroke="var(--teal)" stroke-width="2" fill="none"/>
+            <!-- pulse/ECG -->
+            <path d="M14 32h8l3.5-8 5 16 5-12h11"
+                  stroke="var(--teal)" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        <span>CVEPulse</span>
+      </div>
+      <h1 style="margin:0">Top Trending CVEs Today</h1>
+      <div style="margin-left:auto" class="muted" id="lastUpdated"></div>
+    </header>
+
+    <div class="grid">
+      <section class="panel">
+        <h2>CVE Summary</h2>
+        <div class="badges" id="summaryBadges"></div>
+      </section>
+
+      <aside class="panel">
+        <h2>About</h2>
+        <div class="muted">
+          Live, ranked list of the most talked-about CVEs across multiple security sources.
+          Use the <b>Sort by</b> control to view the newest published CVEs first or the highest-CVSS CVEs first.
+          Each entry shows <b>severity</b> (with <span class="sev sev-critical">Critical</span> clearly flagged in red),
+          <b>CVSS</b>, sources, and publish date.
+        </div>
+      </aside>
+    </div>
+
+    <section class="panel" style="margin-top:16px">
+      <div class="toolbar">
+        <h2 style="margin:0">Trending CVEs</h2>
+        <div class="spacer"></div>
+        <label for="sortMode">Sort by:</label>
+        <select id="sortMode">
+          <option value="published">Published (Newest → Oldest)</option>
+          <option value="cvss">CVSS (High → Low)</option>
+        </select>
+      </div>
+
+      <table class="table" id="table">
+        <thead>
+          <tr>
+            <th style="width:280px">CVE (CVSS)</th>
+            <th>Description</th>
+            <th style="width:220px">Sources</th>
+            <th style="width:140px">Published</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </section>
+
+    <footer>© <span id="year"></span> CVEPulse — CVE awareness dashboard</footer>
+  </div>
+
+<!-- JSON-LD (FAQ + ItemList for SEO). Items are populated in JS -->
+<script type="application/ld+json" id="faqJson">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [{
+    "@type": "Question",
+    "name": "What is CVEPulse?",
+    "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "CVEPulse aggregates multiple security sources to show which CVEs are most discussed right now. It includes severity, CVSS, sources, and publication dates."
+    }
+  },{
+    "@type": "Question",
+    "name": "How can I sort the list?",
+    "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Use the Sort by control to view either the newest published CVEs first or the highest-CVSS CVEs first."
+    }
+  }]
+}
+</script>
+
+<script type="application/ld+json" id="listJson">
+{
+  "@context": "https://schema.org",
+  "@type": "ItemList",
+  "name": "Top Trending CVEs",
+  "itemListElement": []
+}
+</script>
+
+<script>
+  const $ = (s)=>document.querySelector(s);
+
+  let rowsAll = [];   // full dataset
+  let currentSort = 'published';
+
+  async function loadData() {
+    try { const r = await fetch('/api/trending',{cache:'no-store'}); if(r.ok) return await r.json(); } catch {}
+    try { const r2 = await fetch('./trending_cves.json',{cache:'no-store'}); if(r2.ok) return await r2.json(); } catch {}
+    const r3 = await fetch('../backend/data/trending_cves.json',{cache:'no-store'});
+    return await r3.json();
+  }
+
+  function toTs(s, fallback=0){ if(!s) return fallback; const t=Date.parse(s); return isNaN(t)?fallback:t; }
+  function normSeverity(s){
+    if (!s) return "Unknown";
+    const u = String(s).toUpperCase();
+    if (u.startsWith("CRIT")) return "Critical";
+    if (u.startsWith("HIGH")) return "High";
+    if (u.startsWith("MED"))  return "Medium";
+    if (u.startsWith("LOW"))  return "Low";
+    return "Unknown";
+  }
+  function sevClass(sev){
+    switch(sev){
+      case 'Critical': return 'sev-critical';
+      case 'High': return 'sev-high';
+      case 'Medium': return 'sev-medium';
+      case 'Low': return 'sev-low';
+      default: return '';
+    }
+  }
+  function fmtDate(s){ if(!s) return ""; const d=new Date(s); return isNaN(d)?s:d.toISOString().slice(0,10); }
+
+  function byPublishedDesc(a,b){
+    const aTs = toTs(a.published, toTs(a.last_seen, 0));
+    const bTs = toTs(b.published, toTs(b.last_seen, 0));
+    return bTs - aTs;
+  }
+  function byCvssDesc(a,b){
+    const d = (Number(b.cvss_score||0) - Number(a.cvss_score||0));
+    if (d!==0) return d;
+    return byPublishedDesc(a,b);
+  }
+
+  function renderSummary(rows){
+    const counts = {Critical:0, High:0, Medium:0, Low:0, Unknown:0};
+    let maxCvss=0;
+    rows.forEach(r=>{
+      const sev = normSeverity(r.severity);
+      counts[sev] = (counts[sev]||0)+1;
+      const sc = Number(r.cvss_score||0); if(sc>maxCvss) maxCvss=sc;
+    });
+    $('#summaryBadges').innerHTML = `
+      <span class="badge">Total: ${rows.length}</span>
+      <span class="badge">Max CVSS: ${maxCvss.toFixed(1)}</span>
+      <span class="badge badge-critical">Critical: ${counts.Critical||0}</span>
+      <span class="badge badge-high">High: ${counts.High||0}</span>
+      <span class="badge badge-medium">Medium: ${counts.Medium||0}</span>
+      <span class="badge badge-low">Low: ${counts.Low||0}</span>
+    `;
+  }
+
+  function renderTable(rows){
+    const tb = $('#tbody');
+    tb.innerHTML = rows.map(r=>{
+      const cvss = Number(r.cvss_score||0).toFixed(1);
+      const sev  = normSeverity(r.severity);
+      const srcs = (r.sources||[]).map(s=>`<span class="src">${s}</span>`).join('');
+      return `
+        <tr id="${r.id}">
+          <td><span class="cve">${r.id}</span><span class="cvss">(${cvss})</span><br><span class="sev ${sevClass(sev)}">${sev}</span></td>
+          <td>${(r.description||'').replace(/</g,'&lt;')}</td>
+          <td>${srcs}</td>
+          <td>${fmtDate(r.published)}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  function updateJsonLd(rows){
+    const listEl = document.getElementById('listJson');
+    const data   = JSON.parse(listEl.textContent);
+    data.itemListElement = rows.slice(0,10).map((r,i)=>({
+      "@type":"ListItem",
+      "position": i+1,
+      "name": r.id + (r.cvss_score ? ` (CVSS ${Number(r.cvss_score).toFixed(1)})` : ""),
+      "url": "#"+r.id
+    }));
+    listEl.textContent = JSON.stringify(data);
+  }
+
+  function applySort(mode){
+    currentSort = mode;
+    const rows = rowsAll.slice().sort(mode==='cvss' ? byCvssDesc : byPublishedDesc);
+    renderTable(rows);
+    updateJsonLd(rows);
+  }
+
+  (async function init(){
+    $('#year').textContent = new Date().getFullYear();
+    const data = await loadData();
+    rowsAll = (data.results||[]).slice();
+
+    if (data.last_updated) {
+      const t = String(data.last_updated).replace('T',' ').slice(0,19) + " UTC";
+      $('#lastUpdated').textContent = `Last Updated: ${t}`;
+    }
+
+    renderSummary(rowsAll);
+    applySort('published'); // default
+
+    $('#sortMode').addEventListener('change', (e)=>applySort(e.target.value));
+  })();
+</script>
+</body>
+</html>

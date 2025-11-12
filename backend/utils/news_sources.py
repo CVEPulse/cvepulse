@@ -1,0 +1,143 @@
+# backend/utils/news_sources.py
+import re
+import requests
+from datetime import datetime, timezone
+from typing import Dict, List, Tuple, Set
+
+# Use a browser-like UA so Reddit/BC/THN don't block us
+UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"}
+CVE_RE = re.compile(r"\bCVE-\d{4}-\d{4,7}\b", re.IGNORECASE)
+
+def _extract_cves(text: str) -> Set[str]:
+    return set(m.upper() for m in CVE_RE.findall(text or ""))
+
+def _unxml(s: str) -> str:
+    return (s or "").replace("&amp;","&").replace("&lt;","<").replace("&gt;",">").strip()
+
+def _between(s: str, a: str, b: str) -> str:
+    i = s.find(a)
+    if i < 0: return ""
+    i += len(a)
+    j = s.find(b, i)
+    return s[i:j] if j >= 0 else ""
+
+def _parse_rfc822(ts: str):
+    if not ts: return None
+    for fmt in ("%a, %d %b %Y %H:%M:%S %z", "%d %b %Y %H:%M:%S %z"):
+        try:
+            return datetime.strptime(ts, fmt).astimezone(timezone.utc)
+        except Exception:
+            pass
+    try:
+        return datetime.fromisoformat(ts.replace("Z","+00:00")).astimezone(timezone.utc)
+    except Exception:
+        return None
+
+def _fetch_rss_items(url: str) -> List[dict]:
+    try:
+        r = requests.get(url, headers=UA, timeout=25)
+        r.raise_for_status()
+        xml = r.text
+    except Exception:
+        return []
+    items = []
+    for chunk in xml.split("<item>")[1:]:
+        title = _unxml(_between(chunk, "<title>", "</title>"))
+        link  = _unxml(_between(chunk, "<link>", "</link>"))
+        pub   = _between(chunk, "<pubDate>", "</pubDate>") or _between(chunk, "<published>", "</published>")
+        desc  = _unxml(_between(chunk, "<description>", "</description>")) or _unxml(_between(chunk, "<content:encoded>", "</content:encoded>"))
+        items.append({"title": title, "link": link, "pub": pub, "desc": desc})
+    return items
+
+def _flags_from_text(text: str) -> Set[str]:
+    t = (text or "")
+    flags = set()
+    if re.search(r"\bemergency\b|\bout[- ]of[- ]band\b", t, re.I):
+        flags.add("keyword:emergency")
+    if re.search(r"\bzero[- ]?day\b|\b0[- ]day\b", t, re.I):
+        flags.add("keyword:zero-day")
+    if re.search(r"\bno[- ]patch\b|\bpatch not available\b|\bfix not available\b", t, re.I):
+        flags.add("no-patch")
+    if re.search(r"\bactively exploited\b|\bin the wild\b", t, re.I):
+        flags.add("exploited:wild")
+    if re.search(r"\bproof[- ]of[- ]concept\b|\bPoC\b|\bexploit code\b", t, re.I):
+        flags.add("poc:credible")
+    return flags
+
+def mentions_from_thn() -> List[dict]:
+    url = "https://feeds.feedburner.com/TheHackersNews"
+    out = []
+    for it in _fetch_rss_items(url):
+        text = (it.get("title") or "") + " " + (it.get("desc") or "")
+        cves = _extract_cves(text)
+        dt = _parse_rfc822(it.get("pub"))
+        flags = _flags_from_text(text)
+        for c in cves: out.append({"cve": c, "source": "thn", "dt": dt, "flags": flags})
+    return out
+
+def mentions_from_bleeping() -> List[dict]:
+    url = "https://www.bleepingcomputer.com/feed/"
+    out = []
+    for it in _fetch_rss_items(url):
+        text = (it.get("title") or "") + " " + (it.get("desc") or "")
+        cves = _extract_cves(text)
+        dt = _parse_rfc822(it.get("pub"))
+        flags = _flags_from_text(text)
+        for c in cves: out.append({"cve": c, "source": "bc", "dt": dt, "flags": flags})
+    return out
+
+def mentions_from_msrc() -> List[dict]:
+    url = "https://api.msrc.microsoft.com/update-guide/rss"
+    out = []
+    for it in _fetch_rss_items(url):
+        text = (it.get("title") or "") + " " + (it.get("desc") or "")
+        cves = _extract_cves(text)
+        dt = _parse_rfc822(it.get("pub"))
+        flags = _flags_from_text(text) | {"vendor:msrc"}
+        for c in cves: out.append({"cve": c, "source": "msrc", "dt": dt, "flags": flags})
+    return out
+
+def mentions_from_reddit() -> List[dict]:
+    out = []
+    for sub in ("netsec","cybersecurity"):
+        url = f"https://www.reddit.com/r/{sub}/.rss"
+        for it in _fetch_rss_items(url):
+            text = (it.get("title") or "") + " " + (it.get("desc") or "")
+            cves = _extract_cves(text)
+            dt = _parse_rfc822(it.get("pub"))
+            flags = _flags_from_text(text)
+            for c in cves: out.append({"cve": c, "source": "reddit", "dt": dt, "flags": flags})
+    return out
+
+def mentions_from_gnews() -> List[dict]:
+    url = "https://news.google.com/rss/search?q=CVE&hl=en-US&gl=US&ceid=US:en"
+    out = []
+    for it in _fetch_rss_items(url):
+        text = (it.get("title") or "") + " " + (it.get("desc") or "")
+        cves = _extract_cves(text)
+        dt = _parse_rfc822(it.get("pub"))
+        flags = _flags_from_text(text)
+        for c in cves: out.append({"cve": c, "source": "gnews", "dt": dt, "flags": flags})
+    return out
+
+def collect_all_mentions() -> List[dict]:
+    events: List[dict] = []
+    for fn in (mentions_from_thn, mentions_from_bleeping, mentions_from_msrc, mentions_from_reddit, mentions_from_gnews):
+        try:
+            events.extend(fn())
+        except Exception:
+            pass
+    return [e for e in events if e.get("dt")]
+
+def fetch_kev_set() -> Set[str]:
+    url = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
+    try:
+        r = requests.get(url, headers=UA, timeout=25)
+        r.raise_for_status()
+        data = r.json()
+        return {(v.get("cveID") or "").upper() for v in data.get("vulnerabilities", []) if v.get("cveID")}
+    except Exception:
+        return set()
+
+def source_weight(tag: str) -> float:
+    return {"msrc": 5.0, "thn": 3.0, "bc": 3.0, "gnews": 2.0, "reddit": 1.8}.get(tag, 1.0)

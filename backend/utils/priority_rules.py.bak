@@ -1,0 +1,39 @@
+# backend/utils/priority_rules.py
+
+import re
+
+def classify_priority(cve: dict) -> str:
+    """
+    Decide the final priority bucket for a CVE record.
+
+    Inputs (expected keys in `cve`):
+      - severity: string (Critical/High/Medium/Low…) from NVD where possible
+      - signals:  list[str] e.g. ['kev:list', 'vendor:emergency', 'keyword:emergency', 'no-patch', 'poc:credible']
+      - zero_day: bool (optional)
+
+    Rules:
+      Emergency if:
+        - In CISA KEV (signal 'kev:list') OR
+        - Vendor/emergency wording (signal 'vendor:emergency' or 'keyword:emergency')
+      Zero-Day if:
+        - cve['zero_day'] is True OR any signal contains 'no-patch' or 'poc'
+      Else:
+        - Map by severity (Critical → 'Critical'; High → 'High'; default → 'Medium')
+    """
+    signals = set((cve.get("signals") or []))
+    sev = (cve.get("severity") or "").lower()
+
+    # Emergency
+    if ("kev:list" in signals) or ("vendor:emergency" in signals) or ("keyword:emergency" in signals):
+        return "Emergency"
+
+    # Zero-Day
+    if cve.get("zero_day") or any(("no-patch" in s) or ("poc" in s) for s in signals):
+        return "Zero-Day"
+
+    # Severity mapping
+    if sev.startswith("crit"):
+        return "Critical"
+    if sev.startswith("high"):
+        return "High"
+    return "Medium"

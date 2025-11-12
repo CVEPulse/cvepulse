@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: CVEPulse
+    env: python
+    plan: free
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: uvicorn backend.app:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHONPATH
+        value: ./backend
+    autoDeploy: true
+    healthCheckPath: /

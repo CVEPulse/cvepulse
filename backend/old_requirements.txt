@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+requests
+feedparser
+pandas
+beautifulsoup4
+python-dotenv
+apscheduler

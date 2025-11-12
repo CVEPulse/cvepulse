@@ -1,0 +1,140 @@
+/* --- Theme --- */
+:root{
+  --bg:#0d1117;
+  --panel:#161b22;
+  --panel-2:#1a2028;
+  --line:#1f2937;
+  --text:#e6edf3;
+  --muted:#9ba6b1;
+  --cyan:#00bcd4;
+  --red:#ff3b30;
+  --red-soft:#ff6b6b;
+  --orange:#f97316;
+  --amber:#eab308;
+  --yellow:#ffcc66;
+  --teal:#0ea5b3;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  font-family: "Inter","Segoe UI",system-ui,Arial,sans-serif;
+  background:var(--bg);
+  color:var(--text);
+}
+
+/* Header (tighter gutters so left edge feels aligned) */
+.header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 24px; /* was 14px 40px */
+  border-bottom:1px solid var(--line);
+  background:var(--bg);
+  position:sticky;top:0;z-index:10;
+}
+.logo-container{display:flex;align-items:center;gap:12px}
+.logo-svg{ width:42px; height:42px; border-radius:8px; display:block }
+.title{font-weight:800;font-size:1.6rem;color:var(--cyan)}
+.subtitle{font-size:.9rem;color:var(--muted)}
+.timestamp{font-size:.9rem;color:var(--muted)}
+
+/* 3-column layout: full width with 24px page gutters */
+.layout-3col{
+  display:grid;
+  grid-template-columns: 320px 1fr 320px; /* roomy sidecards */
+  gap:16px;
+  align-items:start;
+  width:100%;
+  max-width:none;       /* remove centering container */
+  margin:24px 0;        /* vertical margin only */
+  padding:0 24px;       /* page gutters */
+}
+.centercol{ display:flex; flex-direction:column; gap:18px }
+
+/* Sidecards */
+.sidecard{
+  position:sticky; top:82px; /* lines up with header */
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:10px;
+  padding:16px 14px;
+  color:var(--text);
+  max-height: calc(100vh - 120px);
+  overflow:auto;
+}
+.sidecard h3{ margin:0 0 10px 0; color:var(--cyan) }
+.sidecard h4{ margin:14px 0 6px 0; color:#d1e7ef; font-size:0.95rem }
+.sidecard .muted{ color:var(--muted); font-size:0.9rem }
+ul.tight{ margin:6px 0 8px 18px; padding:0 } ul.tight li{ margin:6px 0 }
+
+/* Cards */
+.card{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:10px;
+  padding:18px 16px;
+}
+h2{margin:0 0 14px 0;font-weight:700}
+
+/* Summary pills */
+.pill-row{display:flex;flex-wrap:wrap;gap:10px}
+.pill{
+  display:inline-block;padding:8px 14px;border-radius:999px;font-weight:700;
+  background:var(--panel-2);border:1px solid var(--line)
+}
+.pill-emergency{background:var(--red);color:#fff;box-shadow:0 0 10px rgba(255,59,48,.35)}
+.pill-zero{background:var(--red-soft);color:#fff}
+.pill-critical{background:#ff8c66;color:#fff}
+.pill-high{background:var(--amber);color:#0a0a0a}
+.pill-medium{background:#9ba6b1;color:#0a0a0a}
+
+/* Triangle icon (replaces emoji for compatibility) */
+.ico-tri{
+  display:inline-block;width:0;height:0;
+  border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:10px solid #fff;
+  margin-right:6px;transform:translateY(1px)
+}
+
+/* Chart */
+.chart-wrap{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+
+/* Filter */
+.filter-bar{display:flex;align-items:center;gap:10px;margin:14px 0}
+.filter-bar select{
+  background:#161b22;color:var(--text);border:1px solid var(--line);
+  border-radius:6px;padding:6px 10px
+}
+
+/* Table */
+.table-wrap{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+table{width:100%;border-collapse:collapse}
+th,td{padding:14px 16px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{background:var(--panel-2);color:var(--cyan)}
+tr:hover{background:#1c1f26}
+
+/* Priority badge */
+.badge{
+  display:inline-block;padding:6px 12px;border-radius:18px;font-weight:700;
+  background:#26323d;border:1px solid var(--line)
+}
+
+/* Description helpers */
+.source-list{margin-top:6px;color:var(--muted);font-size:.9rem}
+
+/* Visibility badges */
+.vis-wrap{margin-top:6px}
+.vis-badge{
+  display:inline-block;padding:4px 10px;border-radius:14px;font-size:.78rem;font-weight:800;margin-right:6px
+}
+.vis-emerging{background:var(--teal);color:#041015}
+.vis-moderately-discussed{background:var(--amber);color:#0b0b0b}
+.vis-highly-discussed{background:var(--orange);color:#141414}
+
+/* Footer */
+footer{margin:30px 0 40px;text-align:center;color:var(--muted);font-size:.9rem}
+
+/* Responsive */
+@media (max-width:1200px){
+  .layout-3col{ grid-template-columns: 1fr; padding:0 16px }
+  .sidecard{ position:relative; top:auto; max-height:none }
+}

@@ -1,0 +1,18 @@
+[
+  {
+    "id": "CVE-2025-0001",
+    "description": "Remote code execution actively exploited",
+    "cvss": 9.8,
+    "priority": "Critical",
+    "emergency": true,
+    "zero_day": true
+  },
+  {
+    "id": "CVE-2025-0002",
+    "description": "Privilege escalation PoC available",
+    "cvss": 8.2,
+    "priority": "High",
+    "emergency": false,
+    "zero_day": false
+  }
+]

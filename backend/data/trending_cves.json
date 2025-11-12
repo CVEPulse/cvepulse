@@ -1,0 +1,84 @@
+{
+  "last_updated": "2025-11-12T20:47:02.169098+00:00",
+  "window_days": 7,
+  "results": [
+    {
+      "id": "CVE-2025-20337",
+      "cvss_score": 10.0,
+      "severity": "CRITICAL",
+      "description": "A vulnerability in a specific API of Cisco ISE and Cisco ISE-PIC could allow an unauthenticated, remote attacker to execute arbitrary code on the underlying operating system as root. The attacker does not require any valid credentials to exploit this vulnerability.\r\n\r\nThis vulnerability is due to insufficient validation of user-supplied input. An attacker could exploit this vulnerability by submitting a crafted API request. A successful exploit could allow the attacker to obtain root privileges on an affected device.",
+      "published": "2025-07-16T17:15:30.573",
+      "sources": [
+        "NVD",
+        "bc"
+      ],
+      "trending_score": 2.72,
+      "last_seen": "2025-11-12T14:00:00+00:00"
+    },
+    {
+      "id": "CVE-2025-20333",
+      "cvss_score": 9.9,
+      "severity": "CRITICAL",
+      "description": "A vulnerability in the VPN web server of Cisco Secure Firewall Adaptive Security Appliance (ASA) Software and Cisco Secure Firewall Threat Defense (FTD) Software could allow an authenticated, remote attacker to execute arbitrary code on an affected device.\r\n\r This vulnerability is due to improper validation of user-supplied input in HTTP(S) requests. An attacker with valid VPN user credentials could exploit this vulnerability by sending crafted HTTP requests to an affected device. A successful exploit could allow the attacker to execute arbitrary code as root, possibly resulting in the complete compromise of the affected device.",
+      "published": "2025-09-25T16:15:32.073",
+      "sources": [
+        "NVD",
+        "thn"
+      ],
+      "trending_score": 0.3448,
+      "last_seen": "2025-11-06T14:58:00+00:00"
+    },
+    {
+      "id": "CVE-2025-12480",
+      "cvss_score": 9.1,
+      "severity": "CRITICAL",
+      "description": "Triofox versions prior to 16.7.10368.56560, are vulnerable to an Improper Access Control flaw that allows access to initial setup pages even after setup is complete.",
+      "published": "2025-11-10T15:15:36.527",
+      "sources": [
+        "NVD",
+        "thn"
+      ],
+      "trending_score": 1.5007,
+      "last_seen": "2025-11-10T20:49:00+00:00"
+    },
+    {
+      "id": "CVE-2025-21042",
+      "cvss_score": 8.8,
+      "severity": "HIGH",
+      "description": "Out-of-bounds write in libimagecodec.quram.so prior to SMR Apr-2025 Release 1 allows remote attackers to execute arbitrary code.",
+      "published": "2025-09-12T08:15:44.743",
+      "sources": [
+        "NVD",
+        "thn"
+      ],
+      "trending_score": 0.5094,
+      "last_seen": "2025-11-07T18:00:00+00:00"
+    },
+    {
+      "id": "CVE-2025-5777",
+      "cvss_score": 7.5,
+      "severity": "HIGH",
+      "description": "Insufficient input validation leading to memory overread when the NetScaler is configured as a Gateway (VPN virtual server, ICA Proxy, CVPN, RDP Proxy) OR AAA virtual server",
+      "published": "2025-06-17T13:15:21.523",
+      "sources": [
+        "NVD",
+        "bc"
+      ],
+      "trending_score": 2.72,
+      "last_seen": "2025-11-12T14:00:00+00:00"
+    },
+    {
+      "id": "CVE-2025-20362",
+      "cvss_score": 6.5,
+      "severity": "MEDIUM",
+      "description": "Update: On November 5, 2025, Cisco became aware of a new attack variant against devices running Cisco Secure ASA Software or Cisco Secure FTD Software releases that are affected by CVE-2025-20333 and CVE-2025-20362. This attack can cause unpatched devices to unexpectedly reload, leading to denial of service (DoS) conditions. Cisco strongly recommends that all customers upgrade to the fixed software releases that are listed in the Fixed Software [\"#fs\"] section of this advisory.\r\n\r A vulnerability in the VPN web server of Cisco Secure Firewall Adaptive Security Appliance (ASA) Software and Cisco Secure Firewall Threat Defense (FTD) Software could allow an unauthenticated, remote attacker to access restricted URL endpoints that are related to remote access VPN that should otherwise be inaccessible without authentication.\r\n\r This vulnerability is due to improper validation of user-supplied input in HTTP(S) requests. An attacker could exploit this vulnerability by sending crafted HTTP requests to a targeted web server on a device. A successful exploit could allow the attacker to access a restricted URL without authentication.",
+      "published": "2025-09-25T16:15:32.280",
+      "sources": [
+        "NVD",
+        "thn"
+      ],
+      "trending_score": 0.3448,
+      "last_seen": "2025-11-06T14:58:00+00:00"
+    }
+  ]
+}
