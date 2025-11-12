@@ -2,7 +2,7 @@
 import os, json, requests
 from datetime import datetime, timedelta, UTC
 
-from utils.news_sources import collect_all_mentions, fetch_kev_set, source_weight
+from backend.utils.news_sources import collect_all_mentions, fetch_kev_set, source_weight
 
 DATA_DIR  = os.path.join(os.path.dirname(__file__), "data")
 os.makedirs(DATA_DIR, exist_ok=True)
