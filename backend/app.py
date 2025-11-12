@@ -1,78 +1,80 @@
+"""
+CVEPulse Backend API
+Serves trending CVE data and refreshes it automatically every 15 minutes.
+"""
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from apscheduler.schedulers.background import BackgroundScheduler
 import os
 import json
-from datetime import datetime
-from backend.scheduler import fetch_trending_cves  # ✅ fixed import for Render
+import asyncio
+from apscheduler.schedulers.background import BackgroundScheduler
+from backend.scheduler import fetch_trending_cves
 
-app = FastAPI(title="CVEPulse API", version="2.0")
+app = FastAPI(title="CVEPulse API", version="1.0")
 
-# Allow frontend access
+# Allow frontend to access
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-DATA_FILE = os.path.join(os.path.dirname(__file__), "data", "trending_cves.json")
+# ---------------------------------------------------------------------
+# File path setup
+# ---------------------------------------------------------------------
+DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
+os.makedirs(DATA_DIR, exist_ok=True)
+DATA_PATH = os.path.join(DATA_DIR, "trending_cves.json")
 
-# =========================================================
-# === Background Refresh Job (every 15 minutes) ===========
-# =========================================================
-def scheduled_refresh():
-    """Refresh CVE data every 15 minutes automatically."""
-    try:
-        print(f"[{datetime.utcnow().isoformat()}] 🔄 Refreshing CVE data...")
-        cves = fetch_trending_cves()
-        if cves and len(cves) > 0:
-            with open(DATA_FILE, "w", encoding="utf-8") as f:
-                json.dump(cves, f, indent=2)
-            print(f"[✓] Saved {len(cves)} CVEs → {DATA_FILE}")
-        else:
-            print("[!] No new CVE data received.")
-    except Exception as e:
-        print(f"[⚠] Scheduled refresh failed: {e}")
-
+# ---------------------------------------------------------------------
+# Background job to refresh every 15 minutes
+# ---------------------------------------------------------------------
 scheduler = BackgroundScheduler()
-scheduler.add_job(scheduled_refresh, "interval", minutes=15)
+
+def scheduled_job():
+    """Runs periodically every 15 min."""
+    try:
+        print("[Scheduler] Refreshing CVE data ...")
+        asyncio.run(fetch_trending_cves(DATA_PATH))
+        print("[Scheduler] Done ✓")
+    except Exception as e:
+        print(f"[Scheduler Error] {e}")
+
+# Add recurring job
+scheduler.add_job(scheduled_job, "interval", minutes=15)
 scheduler.start()
 
-# =========================================================
-# === API Endpoints =======================================
-# =========================================================
+# ---------------------------------------------------------------------
+# API Routes
+# ---------------------------------------------------------------------
+@app.get("/")
+def root():
+    return {"status": "CVEPulse API is running", "source": "Render"}
 
 @app.get("/api/trending")
 def get_trending():
-    """Return latest trending CVEs (used by frontend)."""
-    try:
-        if not os.path.exists(DATA_FILE):
-            return JSONResponse(content={"error": "No data found"}, status_code=404)
+    """Return the current trending CVE data."""
+    if os.path.exists(DATA_PATH):
+        with open(DATA_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data
+    else:
+        return {"error": "No trending data yet — please wait for the first scheduler run."}
 
-        with open(DATA_FILE, "r", encoding="utf-8") as f:
-            cves = json.load(f)
+# ---------------------------------------------------------------------
+# Manual refresh trigger
+# ---------------------------------------------------------------------
+@app.get("/api/refresh")
+async def manual_refresh():
+    """Force a refresh (manual trigger)."""
+    await fetch_trending_cves(DATA_PATH)
+    return {"status": "Manual refresh completed ✓"}
 
-        return {"count": len(cves), "last_updated": datetime.utcnow().isoformat(), "cves": cves}
-    except Exception as e:
-        return JSONResponse(content={"error": f"Failed to load CVE data: {e}"}, status_code=500)
-
-
-@app.get("/")
-def root():
-    """Root health check for Render."""
-    return {
-        "service": "CVEPulse API",
-        "status": "online",
-        "timestamp": datetime.utcnow().isoformat() + "Z"
-    }
-
-# =========================================================
-# === Shutdown Handling ===================================
-# =========================================================
-
-@app.on_event("shutdown")
-def shutdown_event():
-    scheduler.shutdown(wait=False)
+# ---------------------------------------------------------------------
+# Run manually (optional for local testing)
+# ---------------------------------------------------------------------
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
