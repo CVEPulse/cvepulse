@@ -1,80 +1,61 @@
-"""
-CVEPulse Backend API
-Serves trending CVE data and refreshes it automatically every 15 minutes.
-"""
-
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 import os
 import json
-import asyncio
-from apscheduler.schedulers.background import BackgroundScheduler
-from backend.scheduler import fetch_trending_cves
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI(title="CVEPulse API", version="1.0")
+# Path to the JSON file written by scheduler.py
+DATA_FILE = os.path.join(os.path.dirname(__file__), "data", "trending_cves.json")
 
-# Allow frontend to access
+app = FastAPI(
+    title="CVEPulse API",
+    version="1.0.0",
+    description="Backend for CVEPulse trending CVE dashboard",
+)
+
+# Allow your frontend (Hostinger) + any others to call the API
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],   # you can restrict to your domain later
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ---------------------------------------------------------------------
-# File path setup
-# ---------------------------------------------------------------------
-DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
-os.makedirs(DATA_DIR, exist_ok=True)
-DATA_PATH = os.path.join(DATA_DIR, "trending_cves.json")
 
-# ---------------------------------------------------------------------
-# Background job to refresh every 15 minutes
-# ---------------------------------------------------------------------
-scheduler = BackgroundScheduler()
+@app.get("/api/health")
+def health():
+    """Simple health endpoint for Render."""
+    return {"status": "ok"}
 
-def scheduled_job():
-    """Runs periodically every 15 min."""
-    try:
-        print("[Scheduler] Refreshing CVE data ...")
-        asyncio.run(fetch_trending_cves(DATA_PATH))
-        print("[Scheduler] Done ✓")
-    except Exception as e:
-        print(f"[Scheduler Error] {e}")
-
-# Add recurring job
-scheduler.add_job(scheduled_job, "interval", minutes=15)
-scheduler.start()
-
-# ---------------------------------------------------------------------
-# API Routes
-# ---------------------------------------------------------------------
-@app.get("/")
-def root():
-    return {"status": "CVEPulse API is running", "source": "Render"}
 
 @app.get("/api/trending")
 def get_trending():
-    """Return the current trending CVE data."""
-    if os.path.exists(DATA_PATH):
-        with open(DATA_PATH, "r", encoding="utf-8") as f:
+    """
+    Serve the trending CVEs that scheduler.py wrote to data/trending_cves.json.
+    If the file does not exist yet, return an empty structure.
+    """
+    if not os.path.exists(DATA_FILE):
+        return {
+            "last_updated": None,
+            "count": 0,
+            "cves": [],
+        }
+
+    try:
+        with open(DATA_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
-        return data
-    else:
-        return {"error": "No trending data yet — please wait for the first scheduler run."}
+    except Exception:
+        # If file is corrupt for some reason, fail gracefully
+        return {
+            "last_updated": None,
+            "count": 0,
+            "cves": [],
+        }
 
-# ---------------------------------------------------------------------
-# Manual refresh trigger
-# ---------------------------------------------------------------------
-@app.get("/api/refresh")
-async def manual_refresh():
-    """Force a refresh (manual trigger)."""
-    await fetch_trending_cves(DATA_PATH)
-    return {"status": "Manual refresh completed ✓"}
-
-# ---------------------------------------------------------------------
-# Run manually (optional for local testing)
-# ---------------------------------------------------------------------
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Normalise keys so the frontend always sees the same shape
+    cves = data.get("cves", [])
+    return {
+        "last_updated": data.get("last_updated"),
+        "count": data.get("count", len(cves)),
+        "cves": cves,
+    }
