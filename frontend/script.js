@@ -1,205 +1,86 @@
-const API_URL = "http://127.0.0.1:8000/api/trending";
+// frontend/script.js
+const API = "https://cvepulse.onrender.com/api/trending"; // your Render API
+const tableBody = document.querySelector("#cveTableBody");
+const sortSelect = document.querySelector("#sortSelect");
+const lastUpdatedEl = document.querySelector("#lastUpdated");
+const summarySplitEl = document.querySelector("#summarySplit");
 
-let GLOBAL_DATA = { results: [], last_updated: null, window_days: 14 };
+function sevTag(cvss) {
+  if (cvss >= 9) return `<span class="sev sev-critical">Critical</span>`;
+  if (cvss >= 7) return `<span class="sev sev-high">High</span>`;
+  if (cvss >= 4) return `<span class="sev sev-medium">Medium</span>`;
+  return `<span class="sev sev-low">Low</span>`;
+}
 
-const PRIORITY_ORDER = ["Emergency", "Zero-Day", "Critical", "High", "Medium"];
-const PRIORITY_WEIGHT = Object.fromEntries(PRIORITY_ORDER.map((p, i) => [p, i]));
+function sourceChips(sources) {
+  return sources.map(s => `<span class="chip">${s}</span>`).join(" ");
+}
 
-// Helpers
-const mapSeverityToPriority = (sev) => {
-  const s = (sev || "Medium").toString().toLowerCase();
-  if (s.startsWith("crit")) return "Critical";
-  if (s.startsWith("high")) return "High";
-  return "Medium";
-};
-const getPriority = (cve) => cve.priority || mapSeverityToPriority(cve.severity);
-const isoDay = (v) => (v ? new Date(v).toISOString().slice(0, 10) : "");
+function publishedText(p) {
+  return p && p !== "Unknown" ? p.split("T")[0] : "—";
+}
 
-const buzzScore = (cve) => {
-  const srcs = Array.isArray(cve.sources) ? cve.sources : [];
-  const extra = srcs.filter((s) => s !== "NVD").length;
-  const sigs = Array.isArray(cve.signals) ? cve.signals.length : 0;
-  return extra * 2 + sigs;
-};
-const visibilityLabel = (cve) => {
-  const score = buzzScore(cve);
-  if (score >= 5) return "Highly Discussed";
-  if (score >= 2) return "Moderately Discussed";
-  return "Emerging";
-};
+function render(data) {
+  // Summary
+  lastUpdatedEl.textContent = data.last_updated ? new Date(data.last_updated).toUTCString() : "—";
 
-// Fetch + initial render
-async function loadData() {
+  const counts = {critical:0, high:0, medium:0, low:0};
+  data.cves.forEach(x => {
+    const c = x.cvss || 0;
+    if (c >= 9) counts.critical++;
+    else if (c >= 7) counts.high++;
+    else if (c >= 4) counts.medium++;
+    else counts.low++;
+  });
+  summarySplitEl.innerHTML =
+    `Critical: <b>${counts.critical}</b> · High: <b>${counts.high}</b> · Medium: ${counts.medium} · Low: ${counts.low}`;
+
+  // Default sort: Trending (score)
+  applySort(data.cves, sortSelect.value);
+}
+
+function applySort(rows, mode) {
+  const sorted = [...rows];
+  if (mode === "Trending (score)") {
+    sorted.sort((a,b) => (b.trend_score - a.trend_score) || (b.cvss - a.cvss));
+  } else if (mode === "Published (Newest → Oldest)") {
+    sorted.sort((a,b) => new Date(b.published||0) - new Date(a.published||0));
+  } else if (mode === "CVSS (High → Low)") {
+    sorted.sort((a,b) => (b.cvss - a.cvss) || (b.trend_score - a.trend_score));
+  }
+
+  tableBody.innerHTML = sorted.map(x => `
+    <tr>
+      <td class="id">
+        <a href="https://nvd.nist.gov/vuln/detail/${x.id}" target="_blank">${x.id}</a>
+        ${x.cvss ? ` <span class="cvss">${x.cvss.toFixed(1)}</span>` : ``}
+        ${x.cvss >= 9 ? `<span class="pill danger">Critical</span>` : ``}
+        ${x.kev ? `<span class="pill kev">KEV</span>` : ``}
+      </td>
+      <td class="desc">${x.description}</td>
+      <td class="srcs">${sourceChips(x.sources)}</td>
+      <td class="pub">${publishedText(x.published)}</td>
+    </tr>
+  `).join("");
+}
+
+async function load() {
   try {
-    const res = await fetch(API_URL, { cache: "no-store" });
-    if (!res.ok) throw new Error(`API error ${res.status}`);
-    GLOBAL_DATA = await res.json();
-
-    renderSummaryBar(GLOBAL_DATA);
-    renderTrendChart(GLOBAL_DATA);
-
-    const sel = document.getElementById("priorityFilter");
-    if (sel && !sel.dataset._initialized) {
-      sel.value = "Top";
-      sel.dataset._initialized = "1";
-      sel.addEventListener("change", () => renderTable(GLOBAL_DATA));
-    }
-
-    renderTable(GLOBAL_DATA);
-
-    const ts = GLOBAL_DATA.last_updated || new Date().toISOString();
-    const stampEl = document.getElementById("lastUpdated");
-    if (stampEl) stampEl.textContent = "Last Updated: " + new Date(ts).toLocaleString();
-  } catch (err) {
-    console.error(err);
-    const stampEl = document.getElementById("lastUpdated");
-    if (stampEl) stampEl.textContent = "Last Updated: API unavailable";
+    const r = await fetch(API, {cache: "no-store"});
+    const data = await r.json();
+    render(data);
+  } catch (e) {
+    console.error(e);
+    tableBody.innerHTML = `<tr><td colspan="4">Failed to load data</td></tr>`;
   }
 }
 
-// Summary bar
-function renderSummaryBar(data) {
-  const counts = { Emergency: 0, "Zero-Day": 0, Critical: 0, High: 0, Medium: 0 };
-  (data.results || []).forEach((cve) => {
-    const p = getPriority(cve);
-    if (counts[p] !== undefined) counts[p]++;
-  });
-  const set = (id, v) => {
-    const el = document.getElementById(id);
-    if (el) el.textContent = v;
-  };
-  set("countEmergency", counts["Emergency"]);
-  set("countZeroDay", counts["Zero-Day"]);
-  set("countCritical", counts["Critical"]);
-  set("countHigh", counts["High"]);
-  set("countMedium", counts["Medium"]);
-}
-
-// Trend chart
-function renderTrendChart(data) {
-  const results = data.results || [];
-  if (!results.length) { maybeDestroyTrend(); return; }
-
-  const allDays = Array.from(new Set(results.map((r) => isoDay(r.published)).filter(Boolean))).sort();
-  const last7 = allDays.slice(-7);
-  if (!last7.length) { maybeDestroyTrend(); return; }
-
-  const emergencyCounts = last7.map((d) =>
-    results.filter((r) => isoDay(r.published) === d && getPriority(r) === "Emergency").length
-  );
-  const zeroDayCounts = last7.map((d) =>
-    results.filter((r) => isoDay(r.published) === d && getPriority(r) === "Zero-Day").length
-  );
-
-  const ctx = document.getElementById("trendChart").getContext("2d");
-  if (window.trendChartInstance) window.trendChartInstance.destroy();
-
-  window.trendChartInstance = new Chart(ctx, {
-    type: "line",
-    data: {
-      labels: last7,
-      datasets: [
-        {
-          label: "Emergency",
-          data: emergencyCounts,
-          borderColor: "#ff3b30",
-          backgroundColor: "rgba(255,59,48,0.15)",
-          borderWidth: 2,
-          tension: 0.35,
-          fill: true,
-          pointRadius: 4,
-          pointHoverRadius: 6,
-        },
-        {
-          label: "Zero-Day",
-          data: zeroDayCounts,
-          borderColor: "#00bcd4",
-          backgroundColor: "rgba(0,188,212,0.10)",
-          borderWidth: 2,
-          tension: 0.35,
-          fill: true,
-          pointRadius: 4,
-          pointHoverRadius: 6,
-        },
-      ],
-    },
-    options: {
-      responsive: true,
-      interaction: { mode: "index", intersect: false },
-      plugins: { legend: { labels: { color: "#9ba6b1" } } },
-      scales: {
-        x: { ticks: { color: "#9ba6b1" }, grid: { color: "rgba(255,255,255,0.05)" } },
-        y: {
-          beginAtZero: true,
-          ticks: { color: "#9ba6b1", precision: 0, stepSize: 1 },
-          grid: { color: "rgba(255,255,255,0.05)" },
-        },
-      },
-    },
-  });
-}
-function maybeDestroyTrend(){ if (window.trendChartInstance){ window.trendChartInstance.destroy(); window.trendChartInstance=null; } }
-
-// Table
-function renderTable(data) {
-  const tbody = document.querySelector("#cveTable tbody");
-  if (!tbody) return;
-
-  const sel = document.getElementById("priorityFilter");
-  const selected = sel && sel.value ? sel.value : "Top";
-
-  let allow = ["Emergency","Zero-Day","Critical","High","Medium"];
-  if (selected === "Top") allow = ["Emergency","Zero-Day","Critical","High"];
-  else if (selected === "Emergency") allow = ["Emergency"];
-  else if (selected === "Zero-Day") allow = ["Zero-Day"];
-  else if (selected === "Critical") allow = ["Critical"];
-  else if (selected === "High") allow = ["High"];
-  // "All" shows everything
-
-  let rows = (data.results || []).filter((cve) => allow.includes(getPriority(cve)));
-
-  rows.sort((a, b) => {
-    const wa = PRIORITY_WEIGHT[getPriority(a)] ?? 999;
-    const wb = PRIORITY_WEIGHT[getPriority(b)] ?? 999;
-    if (wa !== wb) return wa - wb;
-    const da = new Date(a.published || 0).getTime();
-    const db = new Date(b.published || 0).getTime();
-    return db - da;
-  });
-
-  tbody.innerHTML = "";
-  rows.forEach((cve) => {
-    const sources = Array.isArray(cve.sources) ? cve.sources.join(", ") : "NVD";
-    const desc = cve.description || "No description available";
-    const published = cve.published ? isoDay(cve.published) : "N/A";
-    const priority = getPriority(cve);
-    const signals =
-      Array.isArray(cve.signals) && cve.signals.length
-        ? `<div class="source-list">Signals: ${cve.signals.join(" · ")}</div>`
-        : "";
-
-    const vis = visibilityLabel(cve);
-    const visBadge = `<span class="vis-badge vis-${vis.replace(/\s+/g,'-').toLowerCase()}">${vis}</span>`;
-
-    const row = document.createElement("tr");
-    row.innerHTML = `
-      <td>${cve.id}</td>
-      <td>${desc}<div class="vis-wrap">${visBadge}</div>${signals}</td>
-      <td><span class="badge">${priority}</span></td>
-      <td>${sources}</td>
-      <td>${published}</td>
-    `;
-    tbody.appendChild(row);
-  });
-}
-
-// Guard: ensure default is Top
-document.addEventListener("DOMContentLoaded", () => {
-  const sel = document.getElementById("priorityFilter");
-  if (sel) {
-    const valid = ["Top","Emergency","Zero-Day","Critical","High","All"];
-    if (!valid.includes(sel.value)) sel.value = "Top";
-  }
+sortSelect.addEventListener("change", () => {
+  // re-sort current table without re-fetch
+  Array.from(tableBody.parentElement.parentElement.querySelectorAll("tr"));
+  // fetch then re-render to rely on canonical data & keep simple
+  load();
 });
 
-window.onload = loadData;
+load();
+setInterval(load, 15 * 60 * 1000); // auto-refresh 15 mins
