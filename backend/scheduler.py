@@ -1,199 +1,181 @@
 import os
 import re
 import json
-import datetime
-import asyncio
-from pathlib import Path
-
 import requests
 import feedparser
+from datetime import datetime, timedelta
 
-# === CONFIG ===
-DATA_DIR = Path(__file__).resolve().parent / "data"
-DATA_DIR.mkdir(exist_ok=True)
-OUTPUT_FILE = DATA_DIR / "trending_cves.json"
+DATA_FILE = os.path.join(os.path.dirname(__file__), "data", "trending_cves.json")
 
-NVD_API = "https://services.nvd.nist.gov/rest/json/cves/2.0"
-
-# Optional NVD API key (set NVD_API_KEY env var on Render / locally)
-NVD_API_KEY = os.getenv("NVD_API_KEY")
-HEADERS = {"User-Agent": "CVEPulse/1.3"}
-if NVD_API_KEY:
-    HEADERS["apiKey"] = NVD_API_KEY
-
-FEEDS = {
-    "BleepingComputer": "https://www.bleepingcomputer.com/feed/",
-    "TheHackerNews": "https://feeds.feedburner.com/TheHackersNews",
-    "RedditNetsec": "https://www.reddit.com/r/netsec/.rss",
-    "RedditCyber": "https://www.reddit.com/r/cybersecurity/.rss",
-}
+# -------------------------------------------
+# Helper: Extract CVE IDs from text
+# -------------------------------------------
+def extract_cves(text):
+    return list(set(re.findall(r"CVE-\d{4}-\d{4,7}", text)))
 
 
-# ---------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------
-def extract_cve_ids(text: str):
-    """Extract all CVE identifiers from text."""
-    return re.findall(r"CVE-\d{4}-\d{4,7}", text, re.IGNORECASE)
+# -------------------------------------------
+# Fetch CVEs from external feeds
+# -------------------------------------------
+
+def fetch_bleepingcomputer():
+    url = "https://www.bleepingcomputer.com/feed/"
+    feed = feedparser.parse(url)
+    cves = []
+    for e in feed.entries[:12]:
+        cves += extract_cves(e.title)
+    return list(set(cves))
 
 
-def _fmt_nvd(dt: datetime.datetime) -> str:
-    """
-    NVD examples use: 2021-08-04T00:00:00.000 (no Z in examples)
-    So we convert to naive and format exactly like that.
-    """
-    dt_naive = dt.replace(tzinfo=None)
-    return dt_naive.strftime("%Y-%m-%dT%H:%M:%S.000")
+def fetch_hackernews():
+    url = "https://thehackernews.com/feeds/posts/default"
+    feed = feedparser.parse(url)
+    cves = []
+    for e in feed.entries[:12]:
+        cves += extract_cves(e.title)
+    return list(set(cves))
 
 
-# ---------------------------------------------------------------------
-# NVD fetch (simplified, no orderBy)
-# ---------------------------------------------------------------------
-def fetch_from_nvd(days: int = 7):
-    """Fetch latest CVEs from NVD (tries pub* then lastMod*)."""
-    now = datetime.datetime.now(datetime.UTC)
-    start = now - datetime.timedelta(days=days)
-
-    candidate_params = [
-        {
-            "resultsPerPage": 100,
-            "pubStartDate": _fmt_nvd(start),
-            "pubEndDate": _fmt_nvd(now),
-        },
-        {
-            "resultsPerPage": 100,
-            "lastModStartDate": _fmt_nvd(start),
-            "lastModEndDate": _fmt_nvd(now),
-        },
-    ]
-
-    print("=== NVD FETCH ===")
-    print(f"    Using apiKey: {'YES' if NVD_API_KEY else 'NO'}")
-
-    for params in candidate_params:
-        print("[+] Fetching CVEs from NVD ...")
-        print(f"    Params: {params}")
-        try:
-            r = requests.get(NVD_API, params=params, headers=HEADERS, timeout=25)
-            r.raise_for_status()
-            data = r.json()
-            cves: dict[str, dict] = {}
-            for item in data.get("vulnerabilities", []):
-                cve = item["cve"]
-                metrics = cve.get("metrics", {})
-                score = 0.0
-                if "cvssMetricV31" in metrics:
-                    score = metrics["cvssMetricV31"][0]["cvssData"]["baseScore"]
-                elif "cvssMetricV30" in metrics:
-                    score = metrics["cvssMetricV30"][0]["cvssData"]["baseScore"]
-                elif "cvssMetricV2" in metrics:
-                    score = metrics["cvssMetricV2"][0]["cvssData"]["baseScore"]
-
-                cves[cve["id"]] = {
-                    "id": cve["id"],
-                    "description": cve["descriptions"][0]["value"],
-                    "published": cve["published"],
-                    "cvss": float(score),
-                    "sources": ["NVD"],
-                    "trend_score": 0,
-                }
-            print(f"[✓] Retrieved {len(cves)} CVEs from NVD.")
-            return cves
-        except requests.HTTPError as e:
-            code = e.response.status_code if e.response is not None else "?"
-            print(f"[!] NVD fetch failed with {code}, trying fallback params ...")
-            continue
-        except Exception as e:
-            print(f"[!] NVD fetch failed: {e}")
-            continue
-
-    print("[!] All NVD attempts failed — continuing with news sources only.")
-    return {}
+def fetch_reddit(subreddit):
+    url = f"https://www.reddit.com/r/{subreddit}/.rss"
+    feed = feedparser.parse(url)
+    cves = []
+    for e in feed.entries[:12]:
+        cves += extract_cves(e.title)
+    return list(set(cves))
 
 
-# ---------------------------------------------------------------------
-# News / social feeds
-# ---------------------------------------------------------------------
-def collect_mentions():
-    """Collect CVE mentions from BleepingComputer, TheHackerNews, Reddit."""
-    mentions: dict[str, set] = {}
+# -------------------------------------------
+# Fetch from NVD using API Key
+# -------------------------------------------
+def fetch_nvd():
+    api_key = os.environ.get("NVD_API_KEY", None)
 
-    for name, url in FEEDS.items():
-        print(f"[+] Scanning feed: {name}")
-        try:
-            feed = feedparser.parse(url)
-            for entry in feed.entries[:30]:
-                content = (entry.title + " " + getattr(entry, "summary", ""))
-                ids = extract_cve_ids(content)
-                for cid in ids:
-                    cid_up = cid.upper()
-                    mentions.setdefault(cid_up, set()).add(name)
-        except Exception as e:
-            print(f"[!] Feed {name} failed: {e}")
+    base_url = "https://services.nvd.nist.gov/rest/json/cves/2.0"
+    now = datetime.utcnow()
+    start_date = (now - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    end_date = now.strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
-    print(f"[✓] Mentions collected for {len(mentions)} CVEs")
-    return mentions
-
-
-# ---------------------------------------------------------------------
-# Merge + score
-# ---------------------------------------------------------------------
-def merge_and_score(nvd_cves: dict, mentions: dict):
-    """Merge NVD CVEs with mention data and compute trending score."""
-    for cid, sources in mentions.items():
-        if cid not in nvd_cves:
-            nvd_cves[cid] = {
-                "id": cid,
-                "description": "(Mentioned in news/social sources)",
-                "published": "Unknown",
-                "cvss": 0.0,
-                "sources": [],
-                "trend_score": 0,
-            }
-        nvd_cves[cid]["sources"].extend(list(sources))
-        nvd_cves[cid]["trend_score"] += len(sources)
-
-    ranked = sorted(
-        nvd_cves.values(),
-        key=lambda x: (x["trend_score"] * 2 + x["cvss"]),
-        reverse=True,
-    )
-    return ranked
-
-
-def save_json(cves, output_path: str):
-    data = {
-        "last_updated": datetime.datetime.now(datetime.UTC).isoformat(),
-        "count": len(cves),
-        "cves": cves,
+    params = {
+        "resultsPerPage": 100,
+        "pubStartDate": start_date,
+        "pubEndDate": end_date
     }
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    with open(output_path, "w", encoding="utf-8") as f:
+
+    headers = {}
+    if api_key:
+        headers["apiKey"] = api_key
+
+    print(f"Fetching NVD with API key: {bool(api_key)}")
+
+    try:
+        resp = requests.get(base_url, params=params, headers=headers, timeout=15)
+        resp.raise_for_status()
+        js = resp.json()
+    except Exception as e:
+        print("[NVD ERROR]", e)
+        return []
+
+    cve_list = []
+    for item in js.get("vulnerabilities", []):
+        meta = item.get("cve", {})
+        cve_id = meta.get("id")
+        desc = meta.get("descriptions", [{}])[0].get("value", "")
+        published = meta.get("published", "Unknown")
+
+        metrics = meta.get("metrics", {})
+        cvss = None
+        if "cvssMetricV31" in metrics:
+            cvss = metrics["cvssMetricV31"][0]["cvssData"]["baseScore"]
+        elif "cvssMetricV30" in metrics:
+            cvss = metrics["cvssMetricV30"][0]["cvssData"]["baseScore"]
+        elif "cvssMetricV2" in metrics:
+            cvss = metrics["cvssMetricV2"][0]["cvssData"]["baseScore"]
+        else:
+            cvss = 0.0
+
+        cve_list.append({
+            "id": cve_id,
+            "description": desc,
+            "published": published,
+            "cvss": float(cvss),
+            "sources": ["NVD"],
+            "trend_score": 0
+        })
+
+    return cve_list
+
+
+# -------------------------------------------
+# Merge Trending Sources
+# -------------------------------------------
+def merge_trending():
+    print("Collecting feeds...")
+
+    nvd = fetch_nvd()
+    bc = fetch_bleepingcomputer()
+    hn = fetch_hackernews()
+    reddit_netsec = fetch_reddit("netsec")
+    reddit_cyber = fetch_reddit("cybersecurity")
+
+    source_map = {
+        "BleepingComputer": bc,
+        "TheHackerNews": hn,
+        "RedditNetsec": reddit_netsec,
+        "RedditCyber": reddit_cyber
+    }
+
+    # Build index for fast lookup
+    trending = []
+
+    for cve in nvd:
+        score = 0
+        src_tags = ["NVD"]
+
+        for src_name, cve_list in source_map.items():
+            if cve["id"] in cve_list:
+                score += 1
+                src_tags.append(src_name)
+
+        # Bonus: high severity emphasized
+        if cve["cvss"] >= 9.0:
+            score += 1
+
+        cve["trend_score"] = score
+        cve["sources"] = src_tags
+
+        if score > 0:
+            trending.append(cve)
+
+    # Sort: trending_score → CVSS → publish date
+    trending.sort(key=lambda x: (x["trend_score"], x["cvss"]), reverse=True)
+
+    return trending
+
+
+# -------------------------------------------
+# Save JSON File
+# -------------------------------------------
+def save_json(data):
+    os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
+    with open(DATA_FILE, "w") as f:
         json.dump(data, f, indent=2)
-    print(f"[✓] Wrote {len(cves)} CVEs → {output_path}")
 
 
-# ---------------------------------------------------------------------
-# Public entrypoint used by app.py AND CLI
-# ---------------------------------------------------------------------
-async def fetch_trending_cves(output_path: str):
-    """
-    Main function used by:
-      - app.py (APSheduler / /api/refresh)
-      - local CLI (via run_scheduler)
-    """
-    print("=== CVEPulse Multi-Source Trending ===")
-    nvd_cves = fetch_from_nvd()
-    mentions = collect_mentions()
-    merged = merge_and_score(nvd_cves, mentions)
-    save_json(merged[:200], output_path)
-    print("=== Done ===")
-
-
-def run_scheduler():
-    """Synchronous wrapper so you can run: python scheduler.py"""
-    asyncio.run(fetch_trending_cves(str(OUTPUT_FILE)))
-
-
+# -------------------------------------------
+# Main Entry
+# -------------------------------------------
 if __name__ == "__main__":
-    run_scheduler()
+    print("=== CVEPulse Trending Builder ===")
+    trending = merge_trending()
+
+    output = {
+        "last_updated": datetime.utcnow().isoformat() + "Z",
+        "count": len(trending),
+        "cves": trending
+    }
+
+    save_json(output)
+
+    print(f"✓ Trending CVEs saved → {DATA_FILE}")
+    print(f"✓ Total trending: {len(trending)}")
