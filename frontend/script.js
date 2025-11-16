@@ -1,138 +1,185 @@
-// ---- CONFIG ----
-const API_BASE = "https://cvepulse.onrender.com";   // your Render backend
+/* ----------------------------------------------------
+   DOM ELEMENTS
+---------------------------------------------------- */
+const API_URL = "https://cvepulse.onrender.com/api/trending";
 
-const $ = (q) => document.querySelector(q);
+const tbody = document.getElementById("tbody");
+const totalCves = document.getElementById("total");
+const lastUpdated = document.getElementById("lastUpdated");
 
-const fmtDate = (isoOrUnknown) => {
-  if (!isoOrUnknown || isoOrUnknown === "Unknown") return "—";
-  const d = new Date(isoOrUnknown);
-  return isNaN(d) ? "—" : d.toISOString().slice(0,10);
-};
+const sevCritical = document.getElementById("sev-critical");
+const sevHigh = document.getElementById("sev-high");
+const sevMedium = document.getElementById("sev-medium");
+const sevLow = document.getElementById("sev-low");
 
-const sevClass = (score) => {
-  if (typeof score !== "number") return "";
-  if (score >= 9.0) return "crit";
-  if (score >= 7.0) return "high";
-  if (score >= 4.0) return "med";
-  return "low";
-};
+const searchBox = document.getElementById("search");
+const sortSelect = document.getElementById("sort");
 
-const updateSummary = (data) => {
-  $("#total").textContent = data.count ?? 0;
-  $("#lastUpdated").textContent = data.last_updated ?? "—";
+const trendContainer = document.getElementById("trend-scores");
 
-  const counts = {critical:0,high:0,medium:0,low:0};
-  (data.cves||[]).forEach(c => {
-    const s = typeof c.cvss === "number" ? c.cvss : null;
-    if (s === null) return;
-    if (s >= 9) counts.critical++;
-    else if (s >= 7) counts.high++;
-    else if (s >= 4) counts.medium++;
-    else counts.low++;
-  });
-  $("#sev-critical").textContent = `Critical: ${counts.critical}`;
-  $("#sev-high").textContent     = `High: ${counts.high}`;
-  $("#sev-medium").textContent   = `Medium: ${counts.medium}`;
-  $("#sev-low").textContent      = `Low: ${counts.low}`;
-};
+const themeToggle = document.getElementById("themeToggle");
 
-const buildRow = (item) => {
-  const tr = document.createElement("tr");
+/* ----------------------------------------------------
+   GLOBAL DATA STORE
+---------------------------------------------------- */
+let cveData = [];
+let filteredData = [];
 
-  // CVE + CVSS badge (same line)
-  const cveTd = document.createElement("td");
-  const idSpan = document.createElement("span");
-  idSpan.className = "cve-id";
-  idSpan.textContent = item.id || "(no id)";
-  cveTd.appendChild(idSpan);
+/* ----------------------------------------------------
+   FETCH DATA
+---------------------------------------------------- */
+async function fetchData() {
+  try {
+    const res = await fetch(API_URL);
+    const json = await res.json();
 
-  if (typeof item.cvss === "number") {
-    const badge = document.createElement("span");
-    badge.className = `cvss-badge ${sevClass(item.cvss)}`;
-    badge.textContent = `CVSS ${item.cvss.toFixed(1)}`;
-    cveTd.appendChild(badge);
-  } else {
-    const badge = document.createElement("span");
-    badge.className = "cvss-badge";
-    badge.textContent = "CVSS n/a";
-    cveTd.appendChild(badge);
-  }
+    cveData = json.cves || [];
+    filteredData = [...cveData];
 
-  // Description
-  const descTd = document.createElement("td");
-  descTd.textContent = item.description || "(Mentioned in news/social sources)";
+    updateSummary(json);
+    renderTable(filteredData);
 
-  // Sources
-  const srcTd = document.createElement("td");
-  const srcs = item.sources || [];
-  if (srcs.length === 0) {
-    srcTd.textContent = "—";
-  } else {
-    srcs.forEach(s => {
-      const chip = document.createElement("span");
-      const norm = (s || "").toLowerCase();
-      chip.className = "source-chip";
-      if (norm.includes("nvd")) chip.classList.add("nvd");
-      if (norm.includes("hackernews") || norm === "thn") chip.classList.add("thn");
-      if (norm.includes("bleeping")) chip.classList.add("bc");
-      if (norm.includes("netsec")) chip.classList.add("netsec");
-      if (norm.includes("cyber")) chip.classList.add("rcs");
-      chip.textContent = s;
-      srcTd.appendChild(chip);
-    });
-  }
-
-  // Published / Posted
-  const dateTd = document.createElement("td");
-  const posted = item.posted || item.posted_date || null;
-  const pub = item.published || null;
-  dateTd.textContent = fmtDate(posted || pub);
-
-  tr.appendChild(cveTd);
-  tr.appendChild(descTd);
-  tr.appendChild(srcTd);
-  tr.appendChild(dateTd);
-  return tr;
-};
-
-const fillTable = (data) => {
-  const tbody = $("#tbody");
-  tbody.innerHTML = "";
-  const list = data.cves || [];
-  if (!list.length) {
-    $("#emptyRow").style.display = "";
-    return;
-  }
-  $("#emptyRow").style.display = "none";
-  list.forEach(item => tbody.appendChild(buildRow(item)));
-};
-
-const applySort = (data, mode) => {
-  const arr = [...(data.cves || [])];
-  const getDate = (i) => new Date(i.posted || i.posted_date || i.published || 0).getTime();
-  switch(mode){
-    case "published_asc":  arr.sort((a,b)=> getDate(a)-getDate(b));break;
-    case "cvss_desc":      arr.sort((a,b)=> (b.cvss??-1)-(a.cvss??-1));break;
-    case "cvss_asc":       arr.sort((a,b)=> (a.cvss??-1)-(b.cvss??-1));break;
-    case "trend_desc":     arr.sort((a,b)=> (b.trend_score??0)-(a.trend_score??0));break;
-    case "published_desc":
-    default:               arr.sort((a,b)=> getDate(b)-getDate(a));break;
-  }
-  return {...data, cves:arr};
-};
-
-async function load() {
-  try{
-    const res = await fetch(`${API_BASE}/api/trending`, {cache:"no-store"});
-    const data = await res.json();
-    updateSummary(data);
-    fillTable(applySort(data, $("#sort").value));
-  }catch(e){
-    console.error(e);
-    $("#tbody").innerHTML = `<tr class="empty-row"><td colspan="4">Couldn’t reach API. Check the Render service and CORS.</td></tr>`;
+  } catch (err) {
+    console.error("Fetch error:", err);
   }
 }
 
-$("#sort").addEventListener("change", load);
-document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) load(); });
-load();
+/* ----------------------------------------------------
+   SUMMARY COUNTERS
+---------------------------------------------------- */
+function updateSummary(meta) {
+  totalCves.textContent = meta.count || filteredData.length || 0;
+
+  const counts = { critical: 0, high: 0, medium: 0, low: 0 };
+
+  filteredData.forEach(cve => {
+    const cvss = Number(cve.cvss || 0);
+
+    if (cvss >= 9) counts.critical++;
+    else if (cvss >= 7) counts.high++;
+    else if (cvss >= 4) counts.medium++;
+    else counts.low++;
+  });
+
+  sevCritical.textContent = `Critical: ${counts.critical}`;
+  sevHigh.textContent = `High: ${counts.high}`;
+  sevMedium.textContent = `Medium: ${counts.medium}`;
+  sevLow.textContent = `Low: ${counts.low}`;
+
+  lastUpdated.textContent = meta.last_updated
+    ? new Date(meta.last_updated).toUTCString()
+    : "—";
+}
+
+/* ----------------------------------------------------
+   RENDER TABLE
+---------------------------------------------------- */
+function renderTable(data) {
+  tbody.innerHTML = "";
+
+  data.forEach(cve => {
+    const tr = document.createElement("tr");
+
+    /* Determine severity class */
+    const cvss = Number(cve.cvss || 0);
+    let sevClass = "cvss-low";
+    if (cvss >= 9) sevClass = "cvss-critical";
+    else if (cvss >= 7) sevClass = "cvss-high";
+    else if (cvss >= 4) sevClass = "cvss-medium";
+
+    /* Source icons */
+    const srcIcons = cve.sources
+      .map(s => `<span class="source-icon">${s}</span>`)
+      .join("");
+
+    /* Trend badge */
+    const trendScore = cve.trend_score || 0;
+
+    /* Published / posted date */
+    let published = "—";
+    if (cve.published && cve.published !== "Unknown") {
+      published = new Date(cve.published).toUTCString();
+    } else if (cve.posted_time) {
+      published = new Date(cve.posted_time).toUTCString();
+    }
+
+    tr.innerHTML = `
+      <td class="col-cve">
+        <div class="cve-id">${cve.id}</div>
+        <div class="cvss-badge ${sevClass}">
+          CVSS: ${cvss || "N/A"}
+        </div>
+        <span class="trend-badge">🔥 ${trendScore}</span>
+      </td>
+
+      <td class="col-desc">${cve.description}</td>
+
+      <td class="col-src">${srcIcons}</td>
+
+      <td class="col-date">${published}</td>
+    `;
+
+    tbody.appendChild(tr);
+  });
+}
+
+/* ----------------------------------------------------
+   SEARCH FILTER
+---------------------------------------------------- */
+searchBox.addEventListener("input", () => {
+  const term = searchBox.value.toLowerCase();
+
+  filteredData = cveData.filter(cve =>
+    cve.id.toLowerCase().includes(term) ||
+    (cve.description || "").toLowerCase().includes(term)
+  );
+
+  renderTable(filteredData);
+  updateSummary({ count: filteredData.length });
+});
+
+/* ----------------------------------------------------
+   SORTING
+---------------------------------------------------- */
+sortSelect.addEventListener("change", () => {
+  const val = sortSelect.value;
+
+  if (val === "published_desc") {
+    filteredData.sort((a, b) => new Date(b.published || 0) - new Date(a.published || 0));
+  }
+  if (val === "published_asc") {
+    filteredData.sort((a, b) => new Date(a.published || 0) - new Date(b.published || 0));
+  }
+  if (val === "cvss_desc") {
+    filteredData.sort((a, b) => (b.cvss || 0) - (a.cvss || 0));
+  }
+  if (val === "cvss_asc") {
+    filteredData.sort((a, b) => (a.cvss || 0) - (b.cvss || 0));
+  }
+  if (val === "trend_desc") {
+    filteredData.sort((a, b) => (b.trend_score || 0) - (a.trend_score || 0));
+  }
+
+  renderTable(filteredData);
+});
+
+/* ----------------------------------------------------
+   DARK/LIGHT THEME
+---------------------------------------------------- */
+themeToggle.addEventListener("click", () => {
+  const html = document.documentElement;
+
+  if (html.getAttribute("data-theme") === "light") {
+    html.setAttribute("data-theme", "dark");
+    themeToggle.textContent = "🌙";
+  } else {
+    html.setAttribute("data-theme", "light");
+    themeToggle.textContent = "☀️";
+  }
+});
+
+/* ----------------------------------------------------
+   INIT
+---------------------------------------------------- */
+fetchData();
+setInterval(fetchData, 900_000); // auto-refresh every 15 min

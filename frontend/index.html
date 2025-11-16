@@ -1,93 +1,88 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>CVEPulse — Top Trending CVEs Today</title>
-  <meta name="description" content="Live, ranked list of the most talked-about CVEs across NVD and security news/social sources.">
+  <title>CVEPulse — Top Trending CVEs</title>
+  <meta name="description" content="Live trending CVEs across NVD, Hacker News, BleepingComputer, and Reddit. Sorted by popularity, severity, and recency.">
   <link rel="icon" href="favicon.ico" />
-  <link rel="preconnect" href="https://cvepulse.onrender.com" />
-  <link rel="stylesheet" href="style.css?v=3">
+  <link rel="stylesheet" href="style.css?v=5">
+
+  <!-- Icons -->
+  <link rel="preconnect" href="https://fonts.gstatic.com" />
 </head>
+
 <body>
+  <!-- Header -->
   <header class="site-header">
-    <a class="brand" href="/">
-      <span class="pulse-dot"></span>
-      <span class="brand-word">CVE</span><span class="brand-word brand-accent">Pulse</span>
-    </a>
-    <h1 class="page-title">Top Trending CVEs Today</h1>
+    <div class="header-left">
+      #<img src="logo.svg" alt="CVEPulse Logo" class="logo">
+       <img src="logo.svg" class="logo" alt="CVE Pulse Logo">
+
+      <span class="brand-text">CVEPulse</span>
+    </div>
+
+    <div class="header-right">
+      <button id="themeToggle" class="theme-toggle">🌙</button>
+    </div>
   </header>
 
-  <main class="container">
-    <section class="grid">
-      <article class="card col-2">
-        <div class="card-head">
-          <h2 class="card-title">CVE Summary</h2>
-          <span class="meta">Auto-refreshes every 15 min</span>
-        </div>
-        <div id="summary" class="summary">
-          <div class="summary-row">
-            <span>Total CVEs:</span><strong id="total">–</strong>
-          </div>
-          <div class="summary-row chips">
-            <span>Severity split:</span>
-            <span id="sev-critical" class="chip sev-critical">Critical: 0</span>
-            <span id="sev-high"     class="chip sev-high">High: 0</span>
-            <span id="sev-medium"   class="chip sev-medium">Medium: 0</span>
-            <span id="sev-low"      class="chip sev-low">Low: 0</span>
-          </div>
-          <div class="summary-row small">
-            Last updated: <span id="lastUpdated">—</span> (UTC, window ~7 days)
-          </div>
-        </div>
-      </article>
+  <h1 class="title">Top Trending CVEs Today</h1>
 
-      <aside class="card col-1">
-        <div class="card-head">
-          <h2 class="card-title">About</h2>
-        </div>
-        <p class="about">
-          Live, ranked list of the most talked-about CVEs across NVD and multiple security news sources.
-          Use the <strong>Sort by</strong> control to switch between newest-published and highest-CVSS views.
-          Each entry shows CVE ID, CVSS score, where it’s being discussed, and original publish/post date.
-        </p>
-      </aside>
-    </section>
+  <!-- Search + Filters -->
+  <section class="controls-panel">
+    <input type="text" id="search" placeholder="Search CVEs or keywords…" />
 
-    <section class="card">
-      <div class="table-head">
-        <h2 class="card-title">Trending CVEs</h2>
-        <div class="controls">
-          <label for="sort">Sort by:</label>
-          <select id="sort">
-            <option value="published_desc">Published (Newest → Oldest)</option>
-            <option value="published_asc">Published (Oldest → Newest)</option>
-            <option value="cvss_desc">CVSS (High → Low)</option>
-            <option value="cvss_asc">CVSS (Low → High)</option>
-            <option value="trend_desc">Trending score (High → Low)</option>
-          </select>
-        </div>
-      </div>
+    <div class="severity-filters">
+      <button class="sev-btn" data-sev="all">All</button>
+      <button class="sev-btn critical" data-sev="CRITICAL">Critical</button>
+      <button class="sev-btn high" data-sev="HIGH">High</button>
+      <button class="sev-btn medium" data-sev="MEDIUM">Medium</button>
+      <button class="sev-btn low" data-sev="LOW">Low</button>
+    </div>
 
-      <div class="table-wrap">
-        <table class="table" id="cveTable">
-          <thead>
-            <tr>
-              <th class="col-cve">CVE (CVSS)</th>
-              <th class="col-desc">Description</th>
-              <th class="col-src">Sources</th>
-              <th class="col-date">Published / Posted</th>
-            </tr>
-          </thead>
-          <tbody id="tbody">
-            <tr id="emptyRow" class="empty-row"><td colspan="4">No trending CVEs yet. If you just deployed or cleared cache, run your <code>/admin/refresh?token=…</code> once, then reload.</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-  </main>
+    <select id="sort">
+      <option value="trend_desc">Trending Score (High → Low)</option>
+      <option value="cvss_desc">CVSS (High → Low)</option>
+      <option value="published_desc">Published (Newest → Oldest)</option>
+    </select>
+  </section>
 
-  <footer class="site-foot">© 2025 CVEPulse — CVE awareness dashboard</footer>
-  <script defer src="script.js?v=3"></script>
+  <!-- Summary Card -->
+  <section class="summary-card">
+    <div class="summary-row">
+      <span>Total CVEs:</span> <strong id="total">–</strong>
+    </div>
+    <div class="summary-row split">
+      <span class="sev-badge critical">Critical: <span id="sev-critical">0</span></span>
+      <span class="sev-badge high">High: <span id="sev-high">0</span></span>
+      <span class="sev-badge medium">Medium: <span id="sev-medium">0</span></span>
+      <span class="sev-badge low">Low: <span id="sev-low">0</span></span>
+    </div>
+    <div class="summary-row small">
+      Last Updated: <span id="lastUpdated">—</span> UTC
+    </div>
+  </section>
+
+  <!-- CVE Table -->
+  <section class="card">
+    <table class="cve-table">
+      <thead>
+        <tr>
+          <th class="col-cve">CVE / CVSS / Score</th>
+          <th class="col-desc">Description</th>
+          <th class="col-src">Sources</th>
+          <th class="col-date">Published / Posted</th>
+        </tr>
+      </thead>
+      <tbody id="tbody">
+        <!-- rows injected by script.js -->
+      </tbody>
+    </table>
+  </section>
+
+  <footer class="site-foot">© 2025 CVEPulse — Live Trending Cybersecurity Alerts</footer>
+
+  <script src="script.js?v=5" defer></script>
 </body>
 </html>
